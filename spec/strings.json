@@ -1,0 +1,606 @@
+{
+ "_comment": "画面文言の正本。キーは Android のリソース名 (res/values/strings.xml) と同じ。platforms 省略 = 両 OS 共通。書式は Android 形式 (%1$s / %1$d / %1$.1f)。強調は <b>…</b>。iOS は ios/Tools/gen_spec.py で ios/UchidenLink/Generated/L10n.swift を生成する (Android 側の生成は未実装 = 今は strings.xml と同値を手で保つ)。",
+ "version": 1,
+ "strings": {
+  "app_name": {
+   "ja": "ウチ電Link"
+  },
+  "common_ok": {
+   "ja": "OK"
+  },
+  "common_cancel": {
+   "ja": "キャンセル"
+  },
+  "common_close": {
+   "ja": "閉じる"
+  },
+  "common_save": {
+   "ja": "保存する"
+  },
+  "common_delete": {
+   "ja": "削除する"
+  },
+  "common_add": {
+   "ja": "追加する"
+  },
+  "common_edit": {
+   "ja": "編集"
+  },
+  "common_delete_item": {
+   "ja": "削除"
+  },
+  "common_unset": {
+   "ja": "未設定"
+  },
+  "common_mic_permission": {
+   "ja": "マイク権限が必要です"
+  },
+  "group_uchi": {
+   "ja": "ウチ"
+  },
+  "group_soto": {
+   "ja": "ソト"
+  },
+  "group_device": {
+   "ja": "端末"
+  },
+  "nav_keypad": {
+   "ja": "キーパッド"
+  },
+  "nav_history": {
+   "ja": "履歴"
+  },
+  "nav_contacts": {
+   "ja": "連絡先"
+  },
+  "nav_settings": {
+   "ja": "設定"
+  },
+  "call_caption_incoming": {
+   "ja": "SIP BRIDGE・着信"
+  },
+  "call_caption_outgoing": {
+   "ja": "SIP BRIDGE・発信"
+  },
+  "call_caption_incall": {
+   "ja": "SIP BRIDGE・通話中"
+  },
+  "call_unknown": {
+   "ja": "不明な発信者"
+  },
+  "call_state_incoming": {
+   "ja": "着信中 %1$s"
+  },
+  "call_state_outgoing": {
+   "ja": "呼出中 %1$s"
+  },
+  "call_state_outgoing_early": {
+   "ja": "呼出中 (相手側応答音) %1$s"
+  },
+  "call_end_toast": {
+   "ja": "通話終了 %1$s"
+  },
+  "call_answer": {
+   "ja": "応答"
+  },
+  "call_reject": {
+   "ja": "拒否"
+  },
+  "call_disconnect": {
+   "ja": "切断"
+  },
+  "call_mute": {
+   "ja": "ミュート"
+  },
+  "call_keypad": {
+   "ja": "キーパッド"
+  },
+  "call_speaker": {
+   "ja": "スピーカー"
+  },
+  "call_hold": {
+   "ja": "保留"
+  },
+  "call_add": {
+   "ja": "通話を追加"
+  },
+  "call_contacts": {
+   "ja": "連絡先"
+  },
+  "call_end": {
+   "ja": "終了"
+  },
+  "call_delete_desc": {
+   "ja": "削除 (長押しで全消去)"
+  },
+  "call_dial_desc": {
+   "ja": "発信"
+  },
+  "keypad_status_offline": {
+   "ja": "○ 未接続"
+  },
+  "keypad_status_unregistered": {
+   "ja": "○ 未登録"
+  },
+  "keypad_status_registered": {
+   "ja": "● 登録OK%1$s"
+  },
+  "keypad_status_ext": {
+   "ja": "・内線 %1$s"
+  },
+  "keypad_hint_empty": {
+   "ja": "番号を入力、または履歴・連絡先から発信"
+  },
+  "keypad_caption_extension": {
+   "ja": "内線番号"
+  },
+  "keypad_caption_external": {
+   "ja": "外線"
+  },
+  "keypad_back_to_call": {
+   "ja": "通話に戻る"
+  },
+  "overlay_calling": {
+   "ja": "呼出中"
+  },
+  "keypad_need_number": {
+   "ja": "番号を入力してください"
+  },
+  "history_title": {
+   "ja": "履歴"
+  },
+  "history_clear": {
+   "ja": "全消去"
+  },
+  "history_seg_all": {
+   "ja": "すべて"
+  },
+  "history_seg_missed": {
+   "ja": "不在着信"
+  },
+  "history_empty": {
+   "ja": "履歴はまだありません"
+  },
+  "history_note": {
+   "ja": "行をタップすると発信します。relay 経由のため端末では 5060 を待ち受けません。"
+  },
+  "history_menu_add": {
+   "ja": "連絡先に追加"
+  },
+  "history_clear_msg": {
+   "ja": "履歴をすべて削除しますか？"
+  },
+  "history_need_name": {
+   "ja": "名前を入力してください"
+  },
+  "history_added": {
+   "ja": "連絡先に追加しました"
+  },
+  "history_unknown": {
+   "ja": "不明"
+  },
+  "history_kind_in": {
+   "ja": "着信"
+  },
+  "history_kind_out": {
+   "ja": "発信"
+  },
+  "history_kind_missed": {
+   "ja": "不在着信"
+  },
+  "history_time_yesterday": {
+   "ja": "昨日"
+  },
+  "history_name_hint": {
+   "ja": "名前"
+  },
+  "contacts_title": {
+   "ja": "連絡先"
+  },
+  "contacts_search_hint": {
+   "ja": "🔍 名前・内線番号で検索"
+  },
+  "contacts_empty": {
+   "ja": "連絡先を追加すると、着信時に名前で表示されます"
+  },
+  "contacts_add_title": {
+   "ja": "連絡先を追加"
+  },
+  "contacts_edit_title": {
+   "ja": "連絡先を編集"
+  },
+  "contacts_need_both": {
+   "ja": "名前と番号を入力してください"
+  },
+  "contacts_call": {
+   "ja": "発信"
+  },
+  "contacts_pick_from_device": {
+   "ja": "端末の連絡先から選ぶ"
+  },
+  "contacts_read_fail": {
+   "ja": "端末の連絡先を読み取れませんでした"
+  },
+  "contacts_save_to_local": {
+   "ja": "連絡先に保存"
+  },
+  "contacts_saved": {
+   "ja": "連絡先に保存しました"
+  },
+  "contacts_delete_msg": {
+   "ja": "「%1$s」を削除しますか？"
+  },
+  "contacts_name_hint": {
+   "ja": "名前"
+  },
+  "contacts_number_hint": {
+   "ja": "番号 (内線・外線)"
+  },
+  "settings_conn_title_online": {
+   "ja": "● relay に接続中"
+  },
+  "settings_conn_title_offline": {
+   "ja": "○ 未接続"
+  },
+  "settings_conn_title_retry": {
+   "ja": "再接続中…"
+  },
+  "settings_conn_detail": {
+   "ja": "%1$s・内線 %2$s"
+  },
+  "settings_status_initial": {
+   "ja": "未起動"
+  },
+  "settings_conn_start": {
+   "ja": "開始"
+  },
+  "settings_conn_stop": {
+   "ja": "停止"
+  },
+  "settings_sec_conn": {
+   "ja": "接続"
+  },
+  "settings_sec_sip": {
+   "ja": "SIP アカウント"
+  },
+  "settings_sec_behavior": {
+   "ja": "動作"
+  },
+  "settings_sec_audio": {
+   "ja": "音声"
+  },
+  "settings_sec_permission": {
+   "ja": "権限"
+  },
+  "settings_row_relay_url": {
+   "ja": "relay URL"
+  },
+  "settings_row_access_id": {
+   "ja": "Access Client ID"
+  },
+  "settings_row_access_secret": {
+   "ja": "Access Secret"
+  },
+  "settings_row_dev_token": {
+   "ja": "Dev Token"
+  },
+  "settings_row_sip_user": {
+   "ja": "内線番号 (SIP user)"
+  },
+  "settings_row_sip_password": {
+   "ja": "パスワード"
+  },
+  "settings_row_sip_display": {
+   "ja": "表示名 (任意)"
+  },
+  "settings_sip_note": {
+   "ja": "relay がこのアカウントで Asterisk に登録します。同じ内線を複数端末に設定すると同時着信し、先に応答した端末が通話します。"
+  },
+  "settings_sw_speaker": {
+   "ja": "スピーカーで応答"
+  },
+  "settings_sw_speaker_desc": {
+   "ja": "応答時にスピーカー出力にする (既定 OFF)。受話口の無い端末では OFF でもスピーカーになります"
+  },
+  "settings_sw_device_contacts": {
+   "ja": "端末の連絡先を表示"
+  },
+  "settings_sw_device_contacts_desc": {
+   "ja": "連絡先タブに「端末」グループを表示します (既定 OFF。ON にすると連絡先の権限を求めます)"
+  },
+  "settings_gain": {
+   "ja": "マイクゲイン: %1$.1f"
+  },
+  "settings_row_perm_notification": {
+   "ja": "通知"
+  },
+  "settings_row_perm_mic": {
+   "ja": "マイク"
+  },
+  "settings_perm_allowed": {
+   "ja": "許可済み"
+  },
+  "settings_perm_denied": {
+   "ja": "未許可"
+  },
+  "settings_test_incoming": {
+   "ja": "テスト着信を表示"
+  },
+  "settings_test_from": {
+   "ja": "テスト着信 (101)"
+  },
+  "settings_test_display": {
+   "ja": "テスト"
+  },
+  "settings_footer": {
+   "ja": "アプリ版 %1$s / relay 版 %2$s / device %3$s"
+  },
+  "settings_conn_note": {
+   "ja": "relay URL は必須。認証は Cloudflare Access (Client ID + Secret) か Dev Token の<b>どちらか一方</b>で構いません。入力は欄を離れると自動保存されます。"
+  },
+  "settings_hint_relay_url": {
+   "ja": "例: wss://relay.example.com"
+  },
+  "settings_hint_dev_token": {
+   "ja": "Access を使わない開発・LAN 接続用"
+  },
+  "settings_setup_missing": {
+   "ja": "未入力: %1$s"
+  },
+  "settings_missing_relay_url": {
+   "ja": "relay URL"
+  },
+  "settings_missing_auth": {
+   "ja": "認証 (Access Client ID + Secret か Dev Token)"
+  },
+  "settings_err_start_missing": {
+   "ja": "開始できません。%1$s を入力してください"
+  },
+  "settings_err_url_cleartext_release": {
+   "ja": "平文の ws:// / http:// は使えません。wss:// で入力してください。保存していません"
+  },
+  "call_ended_elsewhere": {
+   "ja": "他端末で応答"
+  },
+  "call_ended_bye": {
+   "ja": "通話終了"
+  },
+  "call_ended_cancel": {
+   "ja": "相手がキャンセル"
+  },
+  "call_ended_reject": {
+   "ja": "拒否 (%1$d)"
+  },
+  "call_ended_timeout": {
+   "ja": "無応答タイムアウト (%1$d)"
+  },
+  "call_ended_other": {
+   "ja": "終了 (%1$s %2$d)"
+  },
+  "error_no_account": {
+   "ja": "SIP アカウント未設定のため発着信できません。設定タブで内線番号を入力してください"
+  },
+  "error_account_password_mismatch": {
+   "ja": "内線のパスワードが relay の登録済み値と一致しません"
+  },
+  "error_account_failed": {
+   "ja": "SIP アカウントの登録に失敗しました: %1$s"
+  },
+  "error_other": {
+   "ja": "エラー (%1$s): %2$s"
+  },
+  "outgoing_failed_dial": {
+   "ja": "発信できませんでした: %1$s"
+  },
+  "provision_scan": {
+   "ja": "QR コードで設定"
+  },
+  "provision_paste": {
+   "ja": "貼り付けで設定"
+  },
+  "provision_scan_prompt": {
+   "ja": "設定用の QR コードを枠に合わせてください"
+  },
+  "provision_paste_title": {
+   "ja": "設定コードを貼り付け"
+  },
+  "provision_paste_hint": {
+   "ja": "{\"uchidenlink\":1,…}"
+  },
+  "provision_paste_ok": {
+   "ja": "読み込む"
+  },
+  "provision_error_title": {
+   "ja": "読み込めませんでした"
+  },
+  "provision_confirm_title": {
+   "ja": "この内容で設定しますか?"
+  },
+  "provision_confirm_note": {
+   "ja": "接続先が知らないホストなら設定しないでください (SIP パスワードがその接続先へ送られます)。書かれていない項目は今の設定のまま残ります。"
+  },
+  "provision_confirm_apply": {
+   "ja": "設定する"
+  },
+  "provision_line_relay": {
+   "ja": "接続先: %1$s"
+  },
+  "provision_line_access": {
+   "ja": "Access Client ID: %1$s"
+  },
+  "provision_line_access_secret": {
+   "ja": "Access Secret: 含む"
+  },
+  "provision_line_dev_token": {
+   "ja": "Dev Token: 含む"
+  },
+  "provision_line_user": {
+   "ja": "内線番号: %1$s"
+  },
+  "provision_line_password": {
+   "ja": "SIP パスワード: 含む"
+  },
+  "provision_line_display": {
+   "ja": "表示名: %1$s"
+  },
+  "provision_line_mode": {
+   "ja": "モード: %1$s"
+  },
+  "provision_line_cleared": {
+   "ja": "(空にする)"
+  },
+  "provision_applied": {
+   "ja": "設定を読み込みました"
+  },
+  "provision_applied_missing": {
+   "ja": "設定を読み込みました。%1$s を入力してから開始してください"
+  },
+  "provision_no_camera": {
+   "ja": "カメラが無いため QR コードを読めません。「貼り付けで設定」を使ってください"
+  },
+  "keypad_mode_foreground": {
+   "ja": "フォアグラウンド",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_mode_title": {
+   "ja": "接続方式",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_mode_desc_foreground": {
+   "ja": "アプリを開いている間 WSS で接続します。閉じている間の着信は VoIP push で起こします (VoIP push は今後対応)。",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_missing_sip": {
+   "ja": "SIP アカウント (内線番号)",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_sec_provision": {
+   "ja": "設定コード",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_sec_test": {
+   "ja": "テスト",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_sec_debug": {
+   "ja": "デバッグ",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_debug_mock_url": {
+   "ja": "モック relay URL (ws://…、空なら通常接続)",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_debug_loopback_start": {
+   "ja": "ループバック試験 (マイク→G.711→再生)",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_debug_loopback_stop": {
+   "ja": "ループバック試験を停止",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_perm_mic_open": {
+   "ja": "設定アプリで許可",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_row_device_id": {
+   "ja": "Device-Id",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_secret_show": {
+   "ja": "表示",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_secret_hide": {
+   "ja": "隠す",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_conn_title_connecting": {
+   "ja": "接続中…",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "settings_conn_title_disabled": {
+   "ja": "○ 停止中",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "call_state_connecting": {
+   "ja": "接続中…",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "call_ended_local": {
+   "ja": "通話終了",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "call_ended_failed": {
+   "ja": "接続が切れたため通話を終了しました",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "call_speaker_fixed": {
+   "ja": "この端末はスピーカーのみ",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "call_dtmf_close": {
+   "ja": "閉じる",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "contacts_group_label": {
+   "ja": "グループ",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "history_swipe_delete": {
+   "ja": "削除",
+   "platforms": [
+    "ios"
+   ]
+  },
+  "keypad_long_press_clear": {
+   "ja": "長押しで全消去",
+   "platforms": [
+    "ios"
+   ]
+  }
+ }
+}

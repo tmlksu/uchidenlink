@@ -1,0 +1,48 @@
+package io.github.tmlksu.uchidenlink.probe
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.util.Log
+
+/**
+ * [TelecomProbe] の adb 操作口 (probe ビルド専用)。
+ *
+ * manifest で `android:permission="android.permission.DUMP"` により保護している。
+ * DUMP は第三者アプリが取得できないため、**adb shell (uid 2000) からのみ**届く。
+ * probe ビルドの applicationId は `io.github.tmlksu.uchidenlink.probe` なので、
+ * コンポーネントは明示 (`-n`) で次のように指定する:
+ * ```
+ * adb shell am broadcast \
+ *   -n io.github.tmlksu.uchidenlink.probe/io.github.tmlksu.uchidenlink.probe.TelecomProbeReceiver \
+ *   -a io.github.tmlksu.uchidenlink.PROBE --es cmd register --es mode managed
+ * ```
+ * cmd: register | unregister | status | incoming | outgoing | expect | hangup
+ * mode: managed (既定) | self
+ * from / to: 番号 (既定 2104)
+ */
+class TelecomProbeReceiver : BroadcastReceiver() {
+
+    companion object {
+        const val ACTION = "io.github.tmlksu.uchidenlink.PROBE"
+    }
+
+    override fun onReceive(ctx: Context, intent: Intent) {
+        if (intent.action != ACTION) return
+        val app = ctx.applicationContext
+        val cmd = intent.getStringExtra("cmd").orEmpty()
+        val mode = intent.getStringExtra("mode") ?: "managed"
+        val num = intent.getStringExtra("to") ?: intent.getStringExtra("from") ?: "2104"
+        TelecomProbe.i("---- CMD $cmd mode=$mode num=$num ----")
+        when (cmd) {
+            "register" -> TelecomProbe.register(app, mode)
+            "unregister" -> TelecomProbe.unregister(app)
+            "status" -> TelecomProbe.status(app)
+            "incoming" -> TelecomProbe.incoming(app, mode, num)
+            "outgoing" -> TelecomProbe.outgoing(app, mode, num)
+            "expect" -> TelecomProbe.expect(num)
+            "hangup" -> TelecomProbe.hangup()
+            else -> TelecomProbe.w("RESULT unknown cmd=$cmd")
+        }
+    }
+}

@@ -1,0 +1,127 @@
+# push / PR ごとの検査。鍵は使わないので APK は未署名。
+# 署名済み APK はタグを打ったとき release.yml が作る。
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 同じブランチへの連続 push では最新のものだけを走らせる
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 公開リポジトリに個人情報・固有情報が入っていないか。ops/deny-patterns.txt は
+  # 公開側に無いので汎用の検査だけになる。commit-msg フックを通らない Devin (Web) の
+  # PR もここで止める。
+  public-safe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: PDF 検査用の pdftotext
+        run: |
+          if [ -n "$(git ls-files '*.pdf')" ]; then
+            sudo apt-get update -q && sudo apt-get install -y -q poppler-utils
+          fi
+
+      - name: ファイル
+        run: scripts/check-public-safe.sh
+
+      - name: コミットの作者・trailer
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$PR_BASE" ]; then
+            range="$PR_BASE..$PR_HEAD"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            range="$PUSH_BEFORE..$GITHUB_SHA"
+          else
+            range="$GITHUB_SHA"
+          fi
+          scripts/check-commit-meta.sh "$range"
+
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # このリポジトリは gradle-wrapper.jar / gradlew を意図的にコミットしていない
+      # (F-Droid がリポジトリ内のバイナリを嫌うため。docs/DISTRIBUTION.md §2)。
+      # そのため wrapper ではなく、バージョンを指定した gradle を使う。
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.9'
+
+      - name: Unit tests
+        run: gradle testFossDebugUnitTest testGmsDebugUnitTest
+
+      # google-services.json はリポジトリに無いので、CI の gms ビルドに FCM 設定は入らない。
+      # コンパイルが通ることの確認までがこのジョブの範囲。
+      - name: Assemble debug APKs (both flavors)
+        run: gradle assembleDebug
+
+      # keystore.properties が無いため未署名で出る。ここでは R8 等のビルド段階の破綻を見る。
+      - name: Assemble release APKs (unsigned)
+        run: gradle assembleRelease
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-report
+          path: android/app/build/reports/tests/
+          retention-days: 14
+
+      - name: Upload debug APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/*/debug/*.apk
+          retention-days: 14
+
+  relay:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: relay/go.mod
+          cache-dependency-path: relay/go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt されていないファイルがあります:"
+            echo "$unformatted"
+            exit 1
+          fi

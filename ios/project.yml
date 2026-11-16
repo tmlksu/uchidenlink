@@ -1,0 +1,79 @@
+name: UchidenLink
+options:
+  bundleIdPrefix: io.github.tmlksu
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+# DEVELOPMENT_TEAM comes from Local.xcconfig (gitignored) so the Personal
+# Team ID is never committed to this public repo. Copy
+# Local.xcconfig.example to Local.xcconfig and fill in your team ID.
+configFiles:
+  Debug: Local.xcconfig
+  Release: Local.xcconfig
+packages:
+  UchidenLinkCore:
+    path: UchidenLinkCore
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "1.7.0"
+    CURRENT_PROJECT_VERSION: "5"
+targets:
+  UchidenLink:
+    type: application
+    platform: iOS
+    sources:
+      - UchidenLink
+    dependencies:
+      - package: UchidenLinkCore
+    # VoIP push (Phase 0b)。aps-environment は開発ビルド用。配布 (TestFlight/App Store) の
+    # アーカイブでは Xcode の自動署名が production に置き換える。有料 Team が必要 (Personal Team 不可)。
+    entitlements:
+      path: UchidenLink/UchidenLink.entitlements
+      properties:
+        aps-environment: development
+    info:
+      path: UchidenLink/Info.plist
+      properties:
+        CFBundleDisplayName: ウチ電Link
+        NSMicrophoneUsageDescription: 通話の音声を送受信するためにマイクを使います
+        NSCameraUsageDescription: 設定用の QR コードを読み取るためにカメラを使います
+        NSContactsUsageDescription: 端末の連絡先を連絡先タブに表示し、着信時に名前で表示するために使います
+        NSLocalNetworkUsageDescription: 開発中の接続確認のため、ローカルネットワーク上のモック relay に接続します
+        NSAllowsLocalNetworking: true
+        NSUserActivityTypes:
+          - INStartCallIntent
+        UIBackgroundModes:
+          - audio
+          - voip
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.tmlksu.uchidenlink
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # アイコンは ios/Tools/gen_app_icon.py が UchidenLink/Assets.xcassets に生成する
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+  UchidenLinkTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - UchidenLinkTests
+    dependencies:
+      - target: UchidenLink
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  UchidenLink:
+    build:
+      targets:
+        UchidenLink: all
+        UchidenLinkTests: [test]
+    test:
+      targets:
+        - UchidenLinkTests
+    run:
+      config: Debug

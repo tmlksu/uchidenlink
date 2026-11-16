@@ -1,0 +1,290 @@
+package io.github.tmlksu.uchidenlink
+
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.AudioTrack
+import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
+import android.os.SystemClock
+import android.util.Log
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * RTP 音声エンジン (G.711 PCMU/PCMA, 8kHz mono, ptime 20ms)。
+ * EchoSIP の UDP 送受信部を撤去し、WebSocket バイナリ送受に差し替えたもの。
+ *
+ * - 送信: マイク → G.711 → [RtpPacket.writeHeader] → [MediaSink.send] (RelayClient.sendRtp)。
+ * - 受信: [onRtpReceived] (RelayClient のバイナリコールバック) → RTP 解析 →
+ *   G.711 デコード → [JitterBuffer] (5 フレーム開始/上限 20) → AudioTrack。
+ * - RTP ヘッダの生成・解析は [RtpPacket] に分離 (JVM テスト可)。
+ */
+class RtpEngine(
+    @Volatile var payloadType: Int = 0, // 0=PCMU 8=PCMA
+    @Volatile var micGain: Float = 2.0f
+) {
+    /** WS バイナリ送信口。RelayClient.sendRtp をそのまま渡す想定。 */
+    fun interface MediaSink {
+        /** 送れたら true (未接続・滞留破棄なら false)。 */
+        fun send(rtp: ByteArray): Boolean
+    }
+
+    companion object {
+        private const val TAG = "RtpEngine"
+        private const val SAMPLE_RATE = 8000
+        private const val FRAME_SAMPLES = 160 // 20ms
+    }
+
+    var sink: MediaSink? = null
+    /**
+     * 通話中に下り RTP が [RxStallMonitor] の閾値 (3 秒) 途絶えたときに再生スレッドから呼ぶ。
+     * 張り直しを実行したら true。未設定なら監視しない。
+     */
+    @Volatile var onRxStall: (() -> Boolean)? = null
+    private val running = AtomicBoolean(false)
+    @Volatile var muted = false
+
+    private var audioTrack: AudioTrack? = null
+    private var audioRecord: AudioRecord? = null
+    private var aec: AcousticEchoCanceler? = null
+    private var ns: NoiseSuppressor? = null
+    // 読み出しは JVM テスト (ヘッダの絶対値検証) 用に internal。
+    internal var seq = (0..30000).random()
+        private set
+    internal var timestamp = (0..100000).random()
+        private set
+    internal val ssrc = (0..Int.MAX_VALUE).random()
+
+    private val jitter = JitterBuffer(warmupFrames = 5, maxFrames = 20)
+    private val playQueue = LinkedBlockingQueue<ShortArray>()
+    @Volatile private var playWarmed = false
+
+    // ---- 通話品質の計測 (issue #26)。各カウンタは書き込みスレッドが 1 つだけ ----
+    /** 下り RTP の統計 (受信スレッド)。 */
+    val rxStats = RtpRxStats()
+    /** 下り途絶監視 (受信スレッドが onRx、再生スレッドが poll)。 */
+    val stallMonitor = RxStallMonitor()
+    /** ウォームアップ後に再生キューが空で無音を挿入した回数 (再生スレッド)。 */
+    @Volatile var jbUnderrun: Long = 0; private set
+    /** 上限超過で捨てたフレーム数 (JitterBuffer + playQueue。受信スレッド)。 */
+    @Volatile var jbOverflow: Long = 0; private set
+    /** AudioTrack.getUnderrunCount() の停止直前の値 (-1 = 取れず)。 */
+    @Volatile var playUnderrun: Int = -1; private set
+    /** 上り送信数 (sink が受け付けた数。送信スレッド)。 */
+    @Volatile var txPkts: Long = 0; private set
+    /** 送信ループの 20 ms 周期からの最大遅れ (ns。送信スレッド)。 */
+    @Volatile var txMaxLateNs: Long = 0; private set
+    /** DTMF 送出キュー (20 ms PCM フレーム)。送信スレッドがマイクの代わりに送る (置換)。 */
+    private val dtmfQueue = LinkedBlockingQueue<ShortArray>()
+
+    fun start() {
+        if (running.getAndSet(true)) return
+        jitter.clear()
+        playQueue.clear()
+        dtmfQueue.clear()
+        playWarmed = false
+
+        // 再生側
+        val minOut = AudioTrack.getMinBufferSize(
+            SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
+        ).coerceAtLeast(FRAME_SAMPLES * 4)
+        audioTrack = AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(SAMPLE_RATE)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(minOut * 4)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
+        audioTrack?.play()
+
+        // 録音側 (VOICE_COMMUNICATIONでHW AECを狙う)
+        val minIn = AudioRecord.getMinBufferSize(
+            SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+        ).coerceAtLeast(FRAME_SAMPLES * 4)
+        audioRecord = AudioRecord(
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT, minIn * 4
+        )
+        try {
+            val sid = audioRecord?.audioSessionId ?: 0
+            if (AcousticEchoCanceler.isAvailable()) {
+                aec = AcousticEchoCanceler.create(sid)?.apply { enabled = true }
+            }
+            if (NoiseSuppressor.isAvailable()) {
+                ns = NoiseSuppressor.create(sid)?.apply { enabled = true }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "AEC/NS unavailable: ${e.message}")
+        }
+        audioRecord?.startRecording()
+
+        // 再生スレッド (ジッタバッファから取り出して書き込む)
+        Thread(playLoop(), "rtp-play").apply { isDaemon = true; start() }
+        // 送信スレッド (20ms周期でマイク→RTP→sink)
+        Thread(sendLoop(), "rtp-send").apply { isDaemon = true; start() }
+    }
+
+    fun stop() {
+        running.set(false)
+        runCatching { Thread.sleep(60) }
+        audioTrack?.let { t -> runCatching { playUnderrun = t.underrunCount } }
+        runCatching { audioRecord?.stop(); audioRecord?.release() }
+        runCatching { audioTrack?.stop(); audioTrack?.release() }
+        runCatching { aec?.release(); ns?.release() }
+        audioRecord = null; audioTrack = null
+        jitter.clear()
+        playQueue.clear()
+    }
+
+    /**
+     * in-band DTMF を送る (UI-DESIGN §3.1)。
+     * [DtmfTone] の 120ms トーン + 80ms 無音を 20ms フレームに分けてキューに積み、
+     * 送信スレッドがマイクフレームの代わりに (ミックスではなく置換で) 送る。
+     * ミュート中でも送る (トーン自体が置換されるため)。未対応文字は無視する。
+     */
+    fun sendDtmf(digit: Char) {
+        if (!running.get()) return
+        val frames = DtmfTone.framesFor(digit) ?: return
+        frames.forEach { dtmfQueue.offer(it) }
+        // 溜まりすぎは古い方を捨てる (10 桁分 = 100 フレームを上限の目安に)
+        while (dtmfQueue.size > 100) dtmfQueue.poll()
+    }
+
+    /** DTMF 送出待ちのフレーム数 (テスト用)。 */
+    fun pendingDtmfFrames(): Int = dtmfQueue.size
+
+    /**
+     * WS バイナリフレーム受信口。RelayClient の Listener.onRtpReceived から呼ぶ。
+     * パケット生成・解析ロジックは EchoSIP から継承 (ヘッダ 12B)。
+     */
+    fun onRtpReceived(packet: ByteArray) {
+        if (!running.get()) return
+        val parsed = RtpPacket.parse(packet) ?: return
+        val now = SystemClock.elapsedRealtimeNanos()
+        rxStats.onPacket(parsed.sequence, parsed.timestamp, parsed.ssrc, now)
+        stallMonitor.onRx(now)
+        val n = parsed.payload.size
+        if (n == 0) return
+        val pcm = ShortArray(n)
+        // 送信側 PT と食い違う場合は受信パケット側を優先 (relay は PT を書き換えない)
+        val isPcmu = parsed.payloadType != 8
+        for (i in 0 until n) {
+            pcm[i] = if (isPcmu) G711.ulawToLinear(parsed.payload[i])
+            else G711.alawToLinear(parsed.payload[i])
+        }
+        val dropped = jitter.offer(pcm)
+        if (dropped > 0) jbOverflow += dropped
+        // ウォームアップ前は無音で埋めない (playLoop 側で無音挿入)
+        jitter.pollReady()?.let { playQueue.offer(it) }
+        // 溜まりすぎは捨てる (JitterBuffer 側でも上限あり。二重の安全策)
+        while (playQueue.size > 20) {
+            if (playQueue.poll() != null) jbOverflow++
+        }
+    }
+
+    private fun playLoop(): Runnable = Runnable {
+        val silence = ShortArray(FRAME_SAMPLES)
+        while (running.get()) {
+            try {
+                // 下り途絶監視: 最終到着からの経過を見るだけ (張り直しは 1 途絶につき 1 回)。
+                onRxStall?.let { stallMonitor.poll(SystemClock.elapsedRealtimeNanos(), it) }
+                val frame = playQueue.poll(40, java.util.concurrent.TimeUnit.MILLISECONDS)
+                if (frame != null) {
+                    playWarmed = true
+                    audioTrack?.write(frame, 0, frame.size)
+                } else if (playWarmed) {
+                    // 無音時は微小無音を書く (アンダーラン防止)
+                    jbUnderrun++
+                    runCatching { audioTrack?.write(silence, 0, silence.size) }
+                }
+            } catch (e: Exception) {
+                if (running.get()) Log.w(TAG, "play: ${e.message}")
+            }
+        }
+    }
+
+    private fun sendLoop(): Runnable = Runnable {
+        val pcmBuf = ShortArray(FRAME_SAMPLES)
+        var nextT = System.nanoTime()
+        // 録音開始直後の read は立ち上がりで長く待つことがあるため、最初の 1 秒は遅れを数えない。
+        var warmupFrames = 50
+        while (running.get()) {
+            try {
+                // DTMF 送出待ちがあればマイクの代わりに送る (置換。ミュートの影響を受けない)。
+                val dtmfFrame = dtmfQueue.poll()
+                val read: Int
+                if (dtmfFrame != null) {
+                    read = dtmfFrame.size.coerceAtMost(FRAME_SAMPLES)
+                    dtmfFrame.copyInto(pcmBuf, 0, 0, read)
+                    sendPcmFrame(pcmBuf, read, encodeMuted = false)
+                } else {
+                    read = audioRecord?.read(pcmBuf, 0, FRAME_SAMPLES) ?: 0
+                    if (read > 0) sendPcmFrame(pcmBuf, read, encodeMuted = true)
+                }
+                nextT += 20_000_000L
+                val now = System.nanoTime()
+                if (warmupFrames > 0) {
+                    warmupFrames--
+                } else {
+                    val lateNs = now - nextT
+                    if (lateNs > txMaxLateNs) txMaxLateNs = lateNs
+                }
+                val sleepMs = (nextT - now) / 1_000_000L
+                if (sleepMs > 0) Thread.sleep(sleepMs) else nextT = now
+            } catch (e: Exception) {
+                if (running.get()) Log.w(TAG, "send: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * PCM フレームを G.711 エンコードして RTP パケット化する。
+     * RTP パケット (12B ヘッダ + payload) の配列を直接確保してそこへ書き込むため、
+     * 中間のペイロード配列を作らない。JVM テスト用に internal。
+     */
+    internal fun buildRtpPacket(pcm: ShortArray, count: Int, encodeMuted: Boolean): ByteArray {
+        val gain = micGain
+        val pkt = ByteArray(RtpPacket.HEADER_SIZE + count)
+        val isPcmu = payloadType != 8
+        for (i in 0 until count) {
+            var s = (pcm[i] * gain).toInt().coerceIn(-32768, 32767)
+            if (encodeMuted && muted) s = 0
+            pkt[RtpPacket.HEADER_SIZE + i] = if (isPcmu) G711.linearToUlaw(s) else G711.linearToAlaw(s)
+        }
+        RtpPacket.writeHeader(
+            pkt,
+            sequence = seq,
+            timestamp = timestamp.toLong(),
+            ssrc = ssrc.toLong(),
+            payloadType = payloadType
+        )
+        return pkt
+    }
+
+    /**
+     * PCM フレームを G.711 エンコードして RTP で送る。
+     * 滞留時の破棄判断は送信先 ([MediaSink] = RelayClient.sendRtp) 側に置くため、
+     * ここでは戻り値を捨てる。シーケンス番号・タイムスタンプは破棄時も進める
+     * (相手からは損失に見える。再送はしない)。
+     */
+    private fun sendPcmFrame(pcm: ShortArray, count: Int, encodeMuted: Boolean) {
+        val pkt = buildRtpPacket(pcm, count, encodeMuted)
+        if (runCatching { sink?.send(pkt) }.getOrNull() == true) txPkts++
+        seq = (seq + 1) and 0xFFFF
+        timestamp += count
+    }
+
+}

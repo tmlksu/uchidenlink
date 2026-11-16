@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- WifiLock (BridgeService) は WAKE_LOCK で取れる。CHANGE_WIFI_STATE は不要なので要求しない (#46)。 -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- API 34+ (S25): foregroundServiceType ごとの権限が必須。phoneCall 型は MANAGE_OWN_CALLS が前提 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <!-- Telecom 統合 (OS 標準の通話画面) 用。CALL_PHONE はランタイム権限で、
+         未許可でもアプリは従来どおり動く (ティア C に落ちるだけ)。 -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- 端末の連絡先連携 (v1.2) 用。要求するのは設定トグルを ON にしたときだけ。 -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- 設定 QR コードの読み取り (v1.6) 用。要求するのは「QR コードで設定」を押したときだけ。
+         zxing-android-embedded の manifest からも合流するが、使う理由をここに残す。 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature android:name="android.hardware.microphone" android:required="true" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <!-- カメラが無い端末でも入れられるように (QR は貼り付けでも入力できる)。 -->
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
+    <!-- API 30+: resolveActivity の可視性確保 (§6.1 休止除外の対応判定用)。
+         minSdk 29 では無視される。 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.AUTO_REVOKE_PERMISSIONS" />
+            <data android:scheme="package" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+            <data android:scheme="package" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.UchidenLink"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- R13: 通話開始時にマイク付きの前面サービスへ切り替えるための透明な画面 -->
+        <activity
+            android:name=".MicPromoteActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name=".CallActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.UchidenLink.Call" />
+
+        <!-- 設定 QR コードの読み取り画面 (zxing-android-embedded)。ライブラリ既定の
+             横向き固定 (sensorLandscape) だとスマホを縦に持ったときに使いにくいので、端末の回転設定に従わせる。 -->
+        <activity
+            android:name="com.journeyapps.barcodescanner.CaptureActivity"
+            android:screenOrientation="unspecified"
+            tools:replace="android:screenOrientation" />
+
+        <service
+            android:name=".BridgeService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall|microphone" />
+
+        <!-- Telecom 統合 (OS 標準の通話画面) 用。tel: の intent-filter は足さない。 -->
+        <service
+            android:name=".SipConnectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- §6.3 1 日 1 回の定期チェック (AlarmManager.setInexactRepeating)。 -->
+        <receiver
+            android:name=".HealthCheckReceiver"
+            android:exported="false" />
+
+    </application>
+</manifest>

@@ -1,0 +1,7 @@
+{
+  "_comment": "call_stats (PROTOCOL v1.2) のゴールデン。report を組み立てて json() した文字列が expected と一致すること (キー順も固定)。Android の RelayProtocol.buildCallStats と同じキー構成。",
+  "report": {"callId": "c-123", "durMs": 30500, "net": "wifi",
+    "rxPkts": 1500, "rxGaps": 0, "rxReorder": 1, "rxJitterMs": 7, "rxMaxGapMs": 140, "rxStall100": 2, "rxStall200": 0, "rxStall500": 0, "rxReconnects": 0,
+    "jbUnderrun": 12, "jbOverflow": 0, "playUnderrun": 3, "txPkts": 1520, "txDrop": 0, "txLost": 4, "txLateMs": 18, "rttStartMs": 230, "rttEndMs": 41},
+  "expected": "{\"t\":\"call_stats\",\"callId\":\"c-123\",\"dur\":30500,\"net\":\"wifi\",\"rx\":{\"pkts\":1500,\"gaps\":0,\"reorder\":1,\"jitterMs\":7,\"maxGapMs\":140,\"stall100\":2,\"stall200\":0,\"stall500\":0,\"reconnects\":0},\"jb\":{\"underrun\":12,\"overflow\":0},\"playUnderrun\":3,\"tx\":{\"pkts\":1520,\"drop\":0,\"lost\":4,\"lateMs\":18},\"rttMs\":[230,41]}"
+}

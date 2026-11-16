@@ -1,0 +1,142 @@
+import java.util.Properties
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+// リリース署名の設定は android/keystore.properties から読む。このファイルと keystore 本体は
+// リポジトリに含めない (`.gitignore` 済み)。このリポジトリは public なので、鍵とパスワードが
+// 履歴に入ると取り返しがつかない。
+//
+// 値が揃っていない場合は署名設定を作らず、release ビルドは未署名になる。これは意図した挙動で、
+// 鍵の無い環境 (F-Droid のビルドサーバ、クローンしただけの第三者) でも
+// `assembleRelease` と `test` が通る。手順は docs/RELEASE.md を参照。
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
+// 署名に必要な値が揃っているか。パスワードが空のまま keystore.properties を置いた場合も
+// 未設定として扱う。中途半端な設定でビルドを失敗させるより、未署名で通したほうが原因が分かりやすい。
+def hasSigningConfig = ["storeFile", "storePassword", "keyAlias", "keyPassword"].every {
+    def v = keystoreProperties.getProperty(it)
+    v != null && !v.trim().isEmpty()
+} && rootProject.file(keystoreProperties.getProperty("storeFile") ?: "").exists()
+
+// google-services.json が無い環境 (CI / 配布物) でもビルドが通るよう条件適用する。
+// FCM を使うのは gms flavor だけなので、置き場所は android/app/src/gms/google-services.json
+// (リポジトリには入れない。`.gitignore` 済み)。
+//
+// 注意: プラグインは適用されると **全 flavor** に processXxxGoogleServices タスクを作り、
+// foss flavor では json が見つからず "File google-services.json is missing" で失敗する。
+// foss は FCM を使わない (GApps 無しの Echo Show 用) ため、該当タスクを無効化する。
+if (file("google-services.json").exists() || file("src/gms/google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+    tasks.configureEach { t ->
+        if (t.name ==~ /process.*Foss.*GoogleServices/) {
+            t.enabled = false
+        }
+    }
+}
+
+android {
+    namespace = "io.github.tmlksu.uchidenlink"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "io.github.tmlksu.uchidenlink"
+        minSdk = 29
+        targetSdk = 35
+        versionCode = 12
+        versionName = "1.7.0"
+    }
+    buildFeatures {
+        // RelayProtocol.CLIENT_VERSION が versionName を参照するため。
+        buildConfig = true
+    }
+    flavorDimensions += "provider"
+    productFlavors {
+        foss {
+            dimension = "provider"
+        }
+        gms {
+            dimension = "provider"
+            // T5 で FCM 受信 (FirebaseMessagingService) を追加する。
+            // google-services プラグイン無しでもビルドは通る。
+        }
+    }
+    signingConfigs {
+        if (hasSigningConfig) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                // minSdk 29 なので v1 (JAR 署名) は不要。v3 (Android 9+) を有効にしておくと、
+                // 将来ここの鍵を替えるとき (鍵ローテーション) の道が残る。
+                // AGP が実際に APK へ付けるのは v3 ブロックだけになる (v3 が v2 を兼ねる)。
+                // v3 を読めない端末は minSdk 29 未満なので、この構成で取りこぼしは無い。
+                // 確認: apksigner verify -v → "v3 scheme ...: true"
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (hasSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                // 未署名で通ること自体は意図した挙動 (鍵の無い環境でもビルドできる)。
+                // ただし黙って未署名 APK が出来ると、配布直前まで気づけない。
+                logger.lifecycle(
+                    "[UchidenLink] keystore.properties が無いか値が空のため、" +
+                        "release APK は未署名になります。")
+            }
+        }
+        debug {
+            applicationIdSuffix = ""
+        }
+        // Telecom 統合 (OS 標準の通話画面) の実機検証用。src/probe/ だけを足した debug ビルド。
+        // applicationId が別 (`.probe`) なので、本番アプリを消さずに同居できる。
+        // adb の無い端末へ手で入れて画面から操作する (ProbeActivity)。
+        probe {
+            initWith(debug)
+            applicationIdSuffix = ".probe"
+            versionNameSuffix = "-probe"
+            matchingFallbacks = ["debug"]
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+    // 履歴リスト (HistoryFragment)。P3 で許可された追加依存。
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    // WSS クライアント (RelayClient)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // 設定の暗号化保存 (BridgeConfig)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    // 設定 QR コードの読み取り (SettingsFragment)。Apache-2.0、GMS 不要なので
+    // GApps の無い Echo Show と F-Droid (foss) でも使える。ML Kit は GMS 依存のため使わない。
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    // gms flavor のみ: T5 で FCM 受信に使用。plugin 無しでもビルドは通る。
+    gmsImplementation("com.google.firebase:firebase-messaging:23.4.1")
+
+    testImplementation("junit:junit:4.13.2")
+    // 本番コードは android の org.json を使うが、JVM 単体テストでは
+    // android.jar がスタブのため実実装をテスト依存として追加する。
+    testImplementation("org.json:json:20240303")
+}

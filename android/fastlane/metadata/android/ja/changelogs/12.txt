@@ -1,0 +1,3 @@
+* プロジェクト名を「ウチ電Link」に改名。applicationId が io.github.tmlksu.uchidenlink に変わるため、旧アプリからの上書き更新はできません (一度アンインストールしてから入れ直してください)
+* iOS アプリを追加
+* G.711 A-law の変換表を ITU 標準に合わせて修正

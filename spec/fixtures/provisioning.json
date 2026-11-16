@@ -1,0 +1,40 @@
+{
+  "_comment": "設定コード (QR / 貼り付け) の解釈のゴールデン。Android の ProvisioningPayloadTest と同じ表。ok は期待するフィールド (無いキー = null)、error は Error になることだけを確かめる (文言は contains で見る)。allowLoopbackCleartext 省略時は false。秘密はダミー値。",
+  "cases": [
+    {"name": "full payload is parsed and trimmed",
+     "input": "{\"uchidenlink\":1,\"url\":\" wss://sip.example.com \",\"cid\":\"abc.access\",\"cs\":\"s3cr3t\",\"user\":\" 2106 \",\"pw\":\" p w \",\"name\":\" 台所 \",\"mode\":\"push\"}",
+     "ok": {"url": "wss://sip.example.com", "cid": "abc.access", "cs": "s3cr3t", "user": "2106", "pw": " p w ", "name": "台所", "mode": "PUSH", "relayHost": "sip.example.com"}},
+    {"name": "generator output with escaped non ascii",
+     "input": "{\"uchidenlink\":1,\"url\":\"wss://sip.example.com\",\"cid\":\"0123456789abcdef0123456789abcdef.access\",\"cs\":\"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210\",\"user\":\"2106\",\"pw\":\"Pa55w0rd-\\\"q\\\"\\\\x\",\"name\":\"\\u53f0\\u6240 \\ud83d\\ude00\",\"mode\":\"PERSISTENT\"}",
+     "ok": {"url": "wss://sip.example.com", "cid": "0123456789abcdef0123456789abcdef.access", "cs": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210", "user": "2106", "pw": "Pa55w0rd-\"q\"\\x", "name": "台所 😀", "mode": "PERSISTENT"}},
+    {"name": "explicit empty string clears the field", "input": "{\"uchidenlink\":1,\"name\":\"\",\"tok\":\"\"}", "ok": {"name": "", "tok": ""}},
+    {"name": "null values are treated as absent", "input": "{\"uchidenlink\":1,\"user\":\"2106\",\"pw\":null}", "ok": {"user": "2106"}},
+    {"name": "empty", "input": "", "error": "空"},
+    {"name": "not json", "input": "https://example.com/", "error": "設定コードではありません"},
+    {"name": "missing version key", "input": "{\"url\":\"wss://sip.example.com\"}", "error": "設定コードではありません"},
+    {"name": "string version", "input": "{\"uchidenlink\":\"1\",\"url\":\"wss://sip.example.com\"}", "error": "版が不正"},
+    {"name": "no known keys", "input": "{\"uchidenlink\":1}", "error": "含まれていません"},
+    {"name": "unknown key only", "input": "{\"uchidenlink\":1,\"unknown\":\"x\"}", "error": "含まれていません"},
+    {"name": "newer version", "input": "{\"uchidenlink\":2,\"url\":\"wss://sip.example.com\"}", "error": "更新"},
+    {"name": "cleartext ws", "input": "{\"uchidenlink\":1,\"url\":\"ws://sip.example.com\"}", "error": "relay URL を使えません"},
+    {"name": "cleartext http lan", "input": "{\"uchidenlink\":1,\"url\":\"http://192.168.1.10:8080\"}", "error": "relay URL を使えません"},
+    {"name": "unknown scheme", "input": "{\"uchidenlink\":1,\"url\":\"ftp://sip.example.com\"}", "error": "未対応のスキーム"},
+    {"name": "loopback cleartext allowed in debug", "input": "{\"uchidenlink\":1,\"url\":\"ws://127.0.0.1:8080\"}", "allowLoopbackCleartext": true, "ok": {"url": "ws://127.0.0.1:8080"}},
+    {"name": "loopback cleartext rejected in release", "input": "{\"uchidenlink\":1,\"url\":\"ws://127.0.0.1:8080\"}", "error": "relay URL を使えません"},
+    {"name": "client id requires secret", "input": "{\"uchidenlink\":1,\"cid\":\"abc.access\"}", "error": "Client Secret"},
+    {"name": "client id with blank secret", "input": "{\"uchidenlink\":1,\"cid\":\"abc.access\",\"cs\":\" \"}", "error": "Client Secret"},
+    {"name": "number user is a type error", "input": "{\"uchidenlink\":1,\"user\":2106}", "error": "文字列"},
+    {"name": "unknown mode", "input": "{\"uchidenlink\":1,\"mode\":\"SOMETIMES\"}", "error": "SOMETIMES"},
+    {"name": "secrets are not echoed", "input": "{\"uchidenlink\":1,\"cid\":\"abc.access\",\"pw\":\"topsecret\",\"mode\":\"X\"}", "error": "", "mustNotContain": "topsecret"}
+  ],
+  "relayUrl": [
+    {"input": "sip.example.com", "ok": "wss://sip.example.com/v1/session"},
+    {"input": "https://sip.example.com/", "ok": "wss://sip.example.com/v1/session"},
+    {"input": "wss://sip.example.com/v1/session", "ok": "wss://sip.example.com/v1/session"},
+    {"input": "WSS://sip.example.com:8443", "ok": "wss://sip.example.com:8443/v1/session"},
+    {"input": "", "error": "empty"},
+    {"input": "ws://sip.example.com", "error": "cleartext"},
+    {"input": "ws://localhost:8080", "allowLoopbackCleartext": true, "ok": "ws://localhost:8080/v1/session"},
+    {"input": "gopher://sip.example.com", "error": "invalid"}
+  ]
+}

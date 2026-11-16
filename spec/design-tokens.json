@@ -1,0 +1,40 @@
+{
+  "_comment": "Nocturne デザイントークンの正本 (docs/UI-DESIGN.md §0)。iOS は ios/Tools/gen_spec.py で ios/UchidenLink/Generated/DesignTokens.swift を生成する。android はそのリソース名 (今は手書きの res/values/colors.xml と同値)。",
+  "version": 1,
+  "colors": {
+    "bg":          {"value": "#0B0B11", "android": "nocturne_bg",          "use": "画面背景"},
+    "surface":     {"value": "#14141C", "android": "nocturne_surface",     "use": "カード / 入力欄 / タブバー"},
+    "surfaceHi":   {"value": "#1C1C27", "android": "nocturne_surface_hi",  "use": "押下・選択中のカード、キーパッドの丸ボタン"},
+    "border":      {"value": "#262633", "android": "nocturne_border",      "use": "カード枠線 / 区切り線"},
+    "text":        {"value": "#ECECF4", "android": "nocturne_text",        "use": "主文字"},
+    "textDim":     {"value": "#8B8BA0", "android": "nocturne_text_dim",    "use": "補助文字 (番号・時刻・説明)"},
+    "accent":      {"value": "#6B5FD6", "android": "nocturne_accent",      "use": "応答/発信ボタン、選択タブ、状態ドット (登録OK)"},
+    "accentSoft":  {"value": "#2A2652", "android": "nocturne_accent_soft", "use": "選択中セグメントの背景、アバター円の塗り"},
+    "accentText":  {"value": "#C9C2FF", "android": "nocturne_accent_text", "use": "アバターの文字、アクセント上の薄い文字"},
+    "neutralBtn":  {"value": "#2A2A36", "android": "nocturne_neutral_btn", "use": "拒否/終了/切断ボタン (赤は使わない)"},
+    "missed":      {"value": "#D98A8A", "android": "nocturne_missed",      "use": "不在着信の矢印/文字 (唯一の警告色)"}
+  },
+  "radius": {
+    "card": 16,
+    "input": 12
+  },
+  "size": {
+    "keypadKey": 72,
+    "callControl": 64,
+    "callPrimary": 72,
+    "dialButton": 72,
+    "callAvatar": 96,
+    "listAvatar": 40,
+    "disabledAlpha": 0.35
+  },
+  "font": {
+    "numberDisplay": 40,
+    "keypadDigit": 28,
+    "keypadLetters": 9,
+    "callName": 28,
+    "callNumber": 16,
+    "callCaption": 11,
+    "callLabel": 12,
+    "pill": 17
+  }
+}

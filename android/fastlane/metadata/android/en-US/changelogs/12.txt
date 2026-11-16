@@ -1,0 +1,3 @@
+* Renamed to UchidenLink. The application ID changed to io.github.tmlksu.uchidenlink, so this cannot update the old app in place (uninstall it first, then install)
+* Added the iOS app
+* Fixed the G.711 A-law conversion table to match the ITU standard

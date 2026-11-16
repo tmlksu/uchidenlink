@@ -1,0 +1,5 @@
+// Copy this file to Local.xcconfig (gitignored) and set your Team ID.
+// Find it with: security find-identity -v -p codesigning
+// (the OU of the "Apple Development" certificate), or in Xcode > Settings >
+// Accounts. Never commit the real file: this repository is public.
+DEVELOPMENT_TEAM = XXXXXXXXXX
