@@ -285,26 +285,31 @@ procd (OpenWrt) では relay のサービスを止めてから同じ編集をし
 
 ## 7. 端末紛失時の失効手順
 
-1. **Service Token を失効**: Zero Trust → Access → Service Auth → Service Tokens → 該当トークンを Revoke / 削除。
-   以後の新規接続は edge で拒否される。
-   - relay は JWT を**接続時にだけ**検証する。失効前から繋がっている WS はそのまま残るので、relay を再起動して
-     既存の接続を切る (他の端末は自動で再接続する)。
-2. **SIP パスワードを変更**: 紛失端末には SIP パスワードも保存されている。その端末が使っていた内線の
-   パスワードを Asterisk 側で変える。登録が失敗状態になるので、残りの端末 (その account に結び付いた端末) の
-   アプリに新しいパスワードを設定すれば切り替わる (§3.3)。
-3. **状態ファイルから端末を削除**: 紛失端末の結び付けと push トークンを消す (消さないと着信時に紛失端末へ
-   発信者番号入りの push が送られ続ける)。端末 ID はログの `WS 接続 device=… principal=…` や
-   `state.json` の `principal` で特定する。relay を止めてから:
+1. **Cloudflare Access でトークン/セッションを失効**: Zero Trust → Access → Service Auth → Service Tokens →
+   該当トークンを Revoke / 削除 (セッションも失効させる)。以後の新規接続は edge で拒否される。
+2. **SIP パスワードを変更** (紛失端末に SIP パスワードを保存していた場合、つまり
+   `sip_account` を使っていた端末): その端末が使っていた内線のパスワードを Asterisk 側で変える。
+   登録が失敗状態になるので、残りの端末 (その account に結び付いた端末) のアプリに新しい
+   パスワードを設定すれば切り替わる (§3.3)。
+3. **relay を停止**: relay は JWT を**接続時の upgrade にだけ**検証する。Access 側で失効させても、
+   失効前から確立している WSS はそのまま残るため、ここで relay を止めて既存の接続を切る
+   (他の端末は起動後に自動で再接続する)。
+4. **停止中に `state.json` から端末を削除**: 紛失端末の結び付けと push トークンを消す (消さないと着信時に
+   紛失端末へ発信者番号入りの push が送られ続ける)。端末 ID はログの `WS 接続 device=… principal=…` や
+   `state.json` の `principal` で特定する。手順 3 で relay を止めている間に:
 
    ```sh
    sudo jq 'del(.devices["<deviceId>"])' data/state.json | sudo tee data/state.json.new >/dev/null
    sudo install -m 600 -o 65532 -g 65532 data/state.json.new data/state.json && sudo rm data/state.json.new
    ```
 
-   その account に結び付いた端末が 0 になった場合、account は次回起動時に REGISTER されるが、どの端末も
-   結び付かないまま残る。不要なら `accounts` からも消す。手順 2 でパスワードを変えた account に結び付いた
-   端末が残っていない場合は、§3.3「Asterisk 側でパスワードを変えた場合」の手順で `accounts.<user>` を
-   削除 (または書き換え) してから、残りの端末で新パスワードを設定する。
+   **稼働中に編集してはいけない。** 走っている relay は次の state 保存でメモリ上の内容を書き戻し、
+   削除した端末の結び付けと push トークンが復活する。
+5. **relay を起動**: 紛失端末が再接続を試みても、再接続時の upgrade で Access に拒否される (手順 1 で
+   失効済み)。その account に結び付いた端末が 0 になった場合、account は次回起動時に
+   REGISTER されるが、どの端末も結び付かないまま残る。不要なら `accounts` からも消す。手順 2 でパスワードを
+   変えた account に結び付いた端末が残っていない場合は、§3.3「Asterisk 側でパスワードを変えた場合」の手順で
+   `accounts.<user>` を削除 (または書き換え) してから、残りの端末で新パスワードを設定する。
 
 ## 8. 残存リスク
 
