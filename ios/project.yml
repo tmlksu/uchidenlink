@@ -37,6 +37,8 @@ targets:
       path: UchidenLink/Info.plist
       properties:
         CFBundleDisplayName: ウチ電Link
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSMicrophoneUsageDescription: 通話の音声を送受信するためにマイクを使います
         NSCameraUsageDescription: 設定用の QR コードを読み取るためにカメラを使います
         NSContactsUsageDescription: 端末の連絡先を連絡先タブに表示し、着信時に名前で表示するために使います
