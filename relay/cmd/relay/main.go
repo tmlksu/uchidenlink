@@ -26,7 +26,7 @@ import (
 )
 
 // RelayVersion は hello.relayVersion として通知する。
-const RelayVersion = "0.5.0"
+const RelayVersion = "0.5.1"
 
 // shutdownGrace は SIGTERM 後に各 account の登録解除 (REGISTER Expires: 0)
 // を送り切るための猶予である。
