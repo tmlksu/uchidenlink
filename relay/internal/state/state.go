@@ -15,7 +15,8 @@
 // 旧形式 (`{"<deviceId>": {"provider": "fcm", "token": "…"}}`, T1/T5 の
 // PUSH_STATE_FILE) は読み込み時に自動移行する。
 //
-// 書き込みは 0600 の一時ファイル → rename で原子的に行う。
+// 書き込みは 0600 の一時ファイル → fsync → rename → 親ディレクトリの
+// fsync で原子的かつ永続的に行う。
 // path が空ならメモリのみで動作する (テスト用)。
 package state
 
@@ -504,13 +505,38 @@ func (s *Store) saveLocked() error {
 	if err != nil {
 		return err
 	}
+	// tmp ファイルを fsync してから rename し、rename も親ディレクトリの
+	// fsync で確定させる (停電時に tmp の中身や rename 自体が消えるのを防ぐ)。
+	// Sync / ディレクトリ fsync の失敗は書き込み・rename の失敗と同じく
+	// 呼び出し側の既存の保存失敗として扱う (致命的エラーにはしない)。
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	w, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("状態ファイル書き込み失敗: %w", err)
+	}
+	if _, err := w.Write(data); err != nil {
+		_ = w.Close()
+		return fmt.Errorf("状態ファイル書き込み失敗: %w", err)
+	}
+	if err := w.Sync(); err != nil {
+		_ = w.Close()
+		return fmt.Errorf("状態ファイル書き込み失敗: %w", err)
+	}
+	if err := w.Close(); err != nil {
 		return fmt.Errorf("状態ファイル書き込み失敗: %w", err)
 	}
 	if err := os.Rename(tmp, s.path); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("状態ファイル確定失敗: %w", err)
 	}
+	dir, err := os.Open(filepath.Dir(s.path))
+	if err != nil {
+		return fmt.Errorf("状態ファイル確定失敗: %w", err)
+	}
+	if err := dir.Sync(); err != nil {
+		_ = dir.Close()
+		return fmt.Errorf("状態ファイル確定失敗: %w", err)
+	}
+	_ = dir.Close()
 	return nil
 }
