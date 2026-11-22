@@ -44,6 +44,9 @@ public final class HistoryStore: @unchecked Sendable {
 
     public init(url: URL) {
         self.url = url
+        // 履歴は端末ローカルのみでよいので iCloud バックアップから外す (SEC-06)。
+        // アップデート前からある既存ファイルにも、ここで属性を付ける。
+        JSONFile.excludeFromBackupAttribute(url)
     }
 
     /// 追加する (先頭=最新)。上限を超えたら古いものから捨てる。作成したエントリを返す。
@@ -116,7 +119,7 @@ public final class HistoryStore: @unchecked Sendable {
         JSONFile.writeArray(url, all.map { e in
             ["id": e.id, "direction": e.direction.rawValue, "number": e.number, "name": e.name,
              "startedAt": e.startedAt, "durationSec": e.durationSec]
-        })
+        }, excludeFromBackup: true)
     }
 }
 
@@ -247,7 +250,7 @@ enum JSONFile {
         return arr.compactMap { $0 as? [String: Any] }
     }
 
-    static func writeArray(_ url: URL, _ objs: [[String: Any]]) {
+    static func writeArray(_ url: URL, _ objs: [[String: Any]], excludeFromBackup: Bool = false) {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard let data = try? JSONSerialization.data(withJSONObject: objs, options: [.sortedKeys]) else { return }
         // 原子的に書く (一時ファイル → rename)。iOS ではデータ保護を「初回ロック解除後」にする
@@ -256,6 +259,19 @@ enum JSONFile {
         try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         #else
         try? data.write(to: url, options: [.atomic])
+        #endif
+        // 原子的な置き換えで isExcludedFromBackup はリセットされるため、指定時は毎回付け直す。
+        if excludeFromBackup { excludeFromBackupAttribute(url) }
+    }
+
+    /// isExcludedFromBackup を付ける。iOS 以外では対象の属性が無いので無操作。
+    /// ファイルが無いときの失敗は無視する (try?)。
+    static func excludeFromBackupAttribute(_ url: URL) {
+        #if os(iOS)
+        var u = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? u.setResourceValues(values)
         #endif
     }
 
