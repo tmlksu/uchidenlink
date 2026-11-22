@@ -641,6 +641,11 @@ func (b *Backend) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 		from = f.Address.User
 		display = f.DisplayName
 	}
+	// Asterisk 由来の発信者番号・表示名は push ペイロードやクライアントの
+	// 通話画面まで無消毒で届くため、ここで消毒する (SEC-01)。着信自体は
+	// 落とさず、条件外の値は「非通知」の表現に置き換えるだけ。
+	from = sanitizeIncomingFrom(from)
+	display = sanitizeIncomingDisplay(display)
 	sc := &sipCall{
 		callID: callID, dir: "in", state: "ringing",
 		from: from, display: display, pt: offer.pt,

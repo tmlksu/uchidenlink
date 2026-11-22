@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
@@ -431,6 +433,72 @@ func TestIncomingFlow(t *testing.T) {
 	case <-uac.byeCh:
 	case <-time.After(8 * time.Second):
 		t.Fatal("UAC が BYE を受けない")
+	}
+}
+
+// TestIncomingSanitized は着信 INVITE の From (user 部) と表示名が
+// EvIncoming までに消毒されることを確かめる (SEC-01)。
+// 条件外の user 部でも着信は落とさず「非通知」の空文字に置き換わる。
+func TestIncomingSanitized(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	regAddr := dummyRegistrar(t, ctx, false, "", "")
+	be, ev := startTestBackend(t, ctx, regAddr, "101", "", 31600)
+	waitRegistered(t, ev)
+	src := listenFrom(t, "127.0.0.1")
+	dst := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: be.ServerPort()}
+	sdp := buildOfferSDP("127.0.0.1", 42000)
+
+	invite := func(fromLine, callID string) []byte {
+		la := src.LocalAddr().(*net.UDPAddr)
+		var b strings.Builder
+		fmt.Fprintf(&b, "INVITE sip:101@%s SIP/2.0\r\n", dst.String())
+		fmt.Fprintf(&b, "Via: SIP/2.0/UDP %s;branch=z9hG4bK%s;rport\r\n", la.String(), randHex(8))
+		b.WriteString("Max-Forwards: 70\r\n")
+		fmt.Fprintf(&b, "From: %s\r\n", fromLine)
+		fmt.Fprintf(&b, "To: <sip:101@%s>\r\n", dst.IP.String())
+		fmt.Fprintf(&b, "Call-ID: %s\r\n", callID)
+		b.WriteString("CSeq: 1 INVITE\r\n")
+		fmt.Fprintf(&b, "Contact: <sip:tester@%s>\r\n", la.String())
+		b.WriteString("Content-Type: application/sdp\r\n")
+		fmt.Fprintf(&b, "Content-Length: %d\r\n\r\n", len(sdp))
+		b.Write(sdp)
+		return []byte(b.String())
+	}
+	check := func(fromLine, wantFrom, wantDisplay string) {
+		t.Helper()
+		callID := "san-" + randHex(4)
+		sendRaw(t, src, dst, invite(fromLine, callID))
+		in := waitIncoming(t, ev, 5*time.Second)
+		if in.CallID != callID {
+			t.Fatalf("別の通話: %q", in.CallID)
+		}
+		if in.From != wantFrom || in.Display != wantDisplay {
+			t.Errorf("From %q / Display %q (期待 %q / %q)", in.From, in.Display, wantFrom, wantDisplay)
+		}
+		if err := be.Reject(callID, 486); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 正常値はバイト単位でそのまま通る (日本語の表示名・anonymous・E.164)。
+	check(`"母屋" <sip:2101@127.0.0.1>;tag=t1`, "2101", "母屋")
+	check(`<sip:anonymous@127.0.0.1>;tag=t2`, "anonymous", "")
+	check(`<sip:+81312345678@127.0.0.1>;tag=t3`, "+81312345678", "")
+	// bidi 制御・ゼロ幅文字を含む表示名は除去される。
+	check("\"x\u200By\u202Ez\" <sip:2102@127.0.0.1>;tag=t4", "2102", "xyz")
+	// 条件外の user 部でも着信は落とさず「非通知」の空文字になる。
+	check("<sip:"+strings.Repeat("a", 70)+"@127.0.0.1>;tag=t5", "", "")
+	// 超長の表示名は rune 境界で打ち切られる。
+	long := strings.Repeat("あ", 100)
+	callID := "san-" + randHex(4)
+	sendRaw(t, src, dst, invite(`"`+long+`" <sip:2103@127.0.0.1>;tag=t6`, callID))
+	in := waitIncoming(t, ev, 5*time.Second)
+	if in.CallID != callID || utf8.RuneCountInString(in.Display) != maxDisplayRunes {
+		t.Fatalf("Display が打ち切られていない: callID=%q runes=%d", in.CallID, utf8.RuneCountInString(in.Display))
+	}
+	if err := be.Reject(callID, 486); err != nil {
+		t.Fatal(err)
 	}
 }
 

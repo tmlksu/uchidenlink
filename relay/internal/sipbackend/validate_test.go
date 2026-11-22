@@ -3,10 +3,12 @@ package sipbackend
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tmlksu/uchidenlink/relay/internal/call"
 )
@@ -124,7 +126,7 @@ func TestSanitizeDisplay(t *testing.T) {
 		{"A\r\nX-Evil: 1", "AX-Evil: 1"},
 		{"\tA\x00B\x7f", "AB"},
 		{"  A  ", "A"},
-		{"A B", "AB"},
+		{"A\u2028B", "AB"},
 		{"bad\xffutf8", "bad�utf8"},
 		{`A"B\C`, `A"B\C`}, // エスケープはしない
 		// 書式文字 (unicode.Cf) の除去: 双方向制御・ゼロ幅空白・BOM。
@@ -147,6 +149,116 @@ func TestSanitizeDisplay(t *testing.T) {
 	long := strings.Repeat("あ", 100)
 	if got := SanitizeDisplay(long); len([]rune(got)) != maxDisplayRunes {
 		t.Errorf("切り詰めが効かない: %d 文字", len([]rune(got)))
+	}
+}
+
+// TestSanitizeIncomingFrom は着信 From (user 部) の消毒である (SEC-01)。
+// 正規形の値はバイト単位でそのまま通り、条件外は「非通知」の空文字に
+// 置き換わる (別の番号らしい文字列は作らない)。
+func TestSanitizeIncomingFrom(t *testing.T) {
+	identity := []string{
+		"",            // 非通知はそのまま
+		"102",         // 内線番号
+		"*43", "*67#", // 機能コード
+		"+81312345678",       // E.164
+		"anonymous",          // Asterisk の非通知表現
+		"alice", "a.b_c-d+e", // 英字の user 名
+		strings.Repeat("1", 32), // 数字の上限
+		strings.Repeat("a", 64), // user 名の上限
+	}
+	for _, in := range identity {
+		if got := sanitizeIncomingFrom(in); got != in {
+			t.Errorf("%q が %q に変化した (恒等のはず)", in, got)
+		}
+	}
+	for _, in := range []string{
+		"102\r\nX-Evil: 1", "10\n2", "10\t2", "102\x00", "102\x7f",
+		"102%0A", "%32%31", "102%zz", "102%", "%2523",
+		"alice@evil.example", "sip:102", "102:5060", "102;maddr=1.2.3.4",
+		"102>", "<102>", `"102"`, "10/2", "a,b", "alice b",
+		"１０２", "０３－１２３４", // 全角は畳まず条件外
+		" 102 ", "(03) 1234 5678", // 前後空白・区切り記号もそのままでは通さない
+		"102 ", "03-1234-5678",
+		strings.Repeat("1", 33), strings.Repeat("a", 65),
+		"bad\xffutf8",
+		"()- .",
+	} {
+		if got := sanitizeIncomingFrom(in); got != "" {
+			t.Errorf("%q が %q で通ってしまった (空文字のはず)", in, got)
+		}
+	}
+	for _, in := range []string{"102", "+81", "anonymous"} {
+		if got := sanitizeIncomingFrom(sanitizeIncomingFrom(in)); got != in {
+			t.Errorf("%q が冪等でない: %q", in, got)
+		}
+	}
+}
+
+// TestSanitizeIncomingDisplay は着信表示名の消毒である (SEC-01)。
+// 日本語の名前は変化させず、制御文字・bidi 制御・ゼロ幅文字を除き、
+// rune 境界で打ち切る。
+func TestSanitizeIncomingDisplay(t *testing.T) {
+	identity := []string{"", "Taro", "山田 太郎", "母屋", "玄関インターホン", "居間 (2F)"}
+	for _, in := range identity {
+		if got := sanitizeIncomingDisplay(in); got != in {
+			t.Errorf("%q が %q に変化した (恒等のはず)", in, got)
+		}
+	}
+	cases := []struct{ in, want string }{
+		{"A\r\nX-Evil: 1", "AX-Evil: 1"},
+		{"\tA\x00B\x7f", "AB"},
+		{"A\u0080\u009fB", "AB"},                     // C1 制御文字
+		{"abc\u202Egnp.exe", "abcgnp.exe"},           // bidi 上書き (RLO)
+		{"\u2066A\u2067B\u2069\u200EC\u200F", "ABC"}, // bidi 分離 + LRM/RLM
+		{"A\u200BB\uFEFFC\u2060", "ABC"},             // ZWSP / BOM / WORD JOINER
+		{"A\u200CB\u200DC", "ABC"},                   // ZWNJ / ZWJ (着信では除く)
+		{"👨\u200D👩", "👨👩"},
+		{"bad\xffutf8", "bad�utf8"}, // 不正 UTF-8
+		{"\u061C山田", "山田"},
+	}
+	for _, c := range cases {
+		got := sanitizeIncomingDisplay(c.in)
+		if got != c.want {
+			t.Errorf("sanitizeIncomingDisplay(%q) = %q (期待 %q)", c.in, got, c.want)
+		}
+		if again := sanitizeIncomingDisplay(got); again != got {
+			t.Errorf("sanitizeIncomingDisplay が冪等でない: %q → %q", got, again)
+		}
+	}
+	long := strings.Repeat("あ", 100)
+	got := sanitizeIncomingDisplay(long)
+	if utf8.RuneCountInString(got) != maxDisplayRunes {
+		t.Errorf("切り詰めが効かない: %d 文字", utf8.RuneCountInString(got))
+	}
+}
+
+// TestSanitizedIncomingFitsPushPayload は消毒後の最悪値 (display 64 runes、
+// from 64 バイト) を乗せた push ペイロードが APNs の上限 (4096 バイト) に
+// 収まることを確かめる (SEC-01)。ペイロードの形は push.apnsPayload と同じ。
+func TestSanitizedIncomingFitsPushPayload(t *testing.T) {
+	from := sanitizeIncomingFrom(strings.Repeat("a", 64))
+	if from == "" {
+		t.Fatal("最悪値の from が消毒で空になった (ペイロードを検査できない)")
+	}
+	body := struct {
+		UchidenLink int    `json:"uchidenlink"`
+		Type        string `json:"type"`
+		CallID      string `json:"callId,omitempty"`
+		From        string `json:"from,omitempty"`
+		Display     string `json:"display,omitempty"`
+	}{
+		UchidenLink: 1, Type: "incoming",
+		CallID:  strings.Repeat("c", 64),
+		From:    from,
+		Display: sanitizeIncomingDisplay(strings.Repeat("あ", 5000)),
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const apnsMaxPayload = 4096 // internal/push/apns.go
+	if len(data) > apnsMaxPayload {
+		t.Fatalf("push ペイロードが上限を超える: %d バイト", len(data))
 	}
 }
 

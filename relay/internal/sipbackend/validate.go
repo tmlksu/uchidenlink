@@ -47,6 +47,8 @@ const maxDisplayRunes = 64
 //
 // 結果として CR/LF・@ : ; , < > " % & ? / = 等は拒否される。
 // # は RFC 3261 上はエスケープ対象だが、Asterisk/HGW の実績に合わせそのまま送る。
+// 着信 From の消毒 (SEC-01, sanitizeIncomingFrom) はこの関数の受け付け範囲に
+// 依存する: ここを厳しくすると条件外の着信番号はすべて非通知 (空文字) になる。
 func normalizeDialTarget(to string) (string, error) {
 	s := strings.TrimSpace(to)
 	if s == "" {
@@ -137,7 +139,7 @@ func ValidateUser(user string) error {
 func SanitizeDisplay(display string) string {
 	s := strings.ToValidUTF8(display, "�")
 	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || (unicode.Is(unicode.Cf, r) && r != '\u200c' && r != '\u200d') || r == ' ' || r == ' ' {
+		if unicode.IsControl(r) || (unicode.Is(unicode.Cf, r) && r != '\u200c' && r != '\u200d') || r == '\u2028' || r == '\u2029' {
 			return -1
 		}
 		return r
@@ -147,6 +149,40 @@ func SanitizeDisplay(display string) string {
 		s = strings.TrimSpace(string([]rune(s)[:maxDisplayRunes]))
 	}
 	return s
+}
+
+// sanitizeIncomingFrom は SIP From の user 部 (Asterisk 由来の着信
+// 発信者番号) をアプリに届けられる形に整える (SEC-01)。
+// 着信を落とさないことが前提なので、判定は発信先と同じ normalizeDialTarget
+// に任せ、検証を通りかつ入力と一致する (正規形のままの) 値だけを
+// バイト単位でそのまま通す。全角→半角などの正規化は行わない。
+// 条件外の値は、既存クライアントが「非通知」(不明な発信者) として扱う
+// 空文字に置き換える。文字を削って別の番号らしい文字列は作らない。
+// 冪等である。
+func sanitizeIncomingFrom(from string) string {
+	if from == "" {
+		return "" // 非通知は空文字のまま通す
+	}
+	if norm, err := normalizeDialTarget(from); err == nil && norm == from {
+		return from
+	}
+	return ""
+}
+
+// sanitizeIncomingDisplay は SIP From の表示名 (Asterisk の電話帳由来の
+// 着信表示名) をアプリ・push ペイロードに届けられる形に整える (SEC-01)。
+// 制御文字・bidi 制御・ゼロ幅文字を除き、rune 境界で切り詰める点は
+// SanitizeDisplay と同じだが、着信表示名では用途の無い ZWNJ/ZWJ も除く
+// (外向きの SanitizeDisplay は絵文字の結合のために両者を残すので、
+// この挙動の違いは着信専用のラッパーとして分ける)。冪等である。
+func sanitizeIncomingDisplay(display string) string {
+	s := strings.Map(func(r rune) rune {
+		if r == '\u200c' || r == '\u200d' {
+			return -1
+		}
+		return r
+	}, display)
+	return SanitizeDisplay(s)
 }
 
 // quoteDisplay は sipgo の DisplayName に入れる値を作る。sipgo は
