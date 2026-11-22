@@ -533,3 +533,93 @@ func TestDeviceBindingOff(t *testing.T) {
 		t.Errorf("off なのに principal が記録された: %+v", d)
 	}
 }
+
+// TestReadLimitClosesOnlyThatConn は読み取り上限 (32 KiB) +1 バイトの
+// メッセージを送った接続だけが 1009 (message too big) で切断され、
+// 他の接続・通話が継続することを確認する (SEC-02)。
+func TestReadLimitClosesOnlyThatConn(t *testing.T) {
+	fx := newFixture(t)
+	a := dial(t, fx.url, "dev-A")
+	defer a.Close(websocket.StatusNormalClosure, "")
+	b := dial(t, fx.url, "dev-B")
+	defer b.Close(websocket.StatusNormalClosure, "")
+	if _, ok := readSkipReg(t, a).(*proto.Hello); !ok {
+		t.Fatalf("A に hello が来ない")
+	}
+	if _, ok := readSkipReg(t, b).(*proto.Hello); !ok {
+		t.Fatalf("B に hello が来ない")
+	}
+
+	id := fx.fb(t).InjectIncoming("103", "Bob", 0)
+	if inc, ok := readSkipReg(t, a).(*proto.Incoming); !ok || inc.CallID != id {
+		t.Fatalf("A に incoming が来ない")
+	}
+	readSkipReg(t, b) // incoming
+	writeJSON(t, a, &proto.Answer{T: proto.TAnswer, CallID: id})
+	if _, ok := readSkipReg(t, a).(*proto.Answered); !ok {
+		t.Fatalf("A に answered が来ない")
+	}
+	if end, ok := readSkipReg(t, b).(*proto.Ended); !ok || end.Reason != "answered_elsewhere" {
+		t.Fatalf("B には answered_elsewhere のはず: %+v", end)
+	}
+
+	// 上限+1 バイト (32769) のメッセージを送ると、その接続だけが切断される。
+	huge := make([]byte, 32769)
+	for i := range huge {
+		huge[i] = 'x'
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := b.Write(ctx, websocket.MessageText, huge); err != nil {
+		t.Fatalf("超大メッセージの送信失敗: %v", err)
+	}
+	if _, _, err := b.Read(ctx); websocket.CloseStatus(err) != websocket.StatusMessageTooBig {
+		t.Fatalf("B は 1009 で閉じられるはず: %v", err)
+	}
+
+	// 勝者 A の接続と通話は継続する (RTP エコーと ping/pong)。
+	rtp := []byte{0x80, 0x00, 0x12, 0x34, 1, 2, 3}
+	if err := a.Write(ctx, websocket.MessageBinary, rtp); err != nil {
+		t.Fatalf("A のバイナリ送信失敗: %v", err)
+	}
+	typ, echo, err := a.Read(ctx)
+	if err != nil || typ != websocket.MessageBinary || string(echo) != string(rtp) {
+		t.Fatalf("A のエコーが戻らない: typ=%v err=%v", typ, err)
+	}
+	writeJSON(t, a, &proto.Ping{T: proto.TPing, Ts: 1})
+	if _, ok := readSkipReg(t, a).(*proto.Pong); !ok {
+		t.Fatalf("A に pong が来ない")
+	}
+}
+
+// TestReadLimitBoundaryMessagePasses はちょうど読み取り上限 (32768 バイト) の
+// メッセージが切断されず通常どおり処理されることを確認する (SEC-02)。
+// 「上限+1 で切断」(TestReadLimitClosesOnlyThatConn) と対にして、境界で
+// 挙動が変わらないことを固定する。
+func TestReadLimitBoundaryMessagePasses(t *testing.T) {
+	fx := newFixture(t)
+	a := dial(t, fx.url, "dev-A")
+	defer a.Close(websocket.StatusNormalClosure, "")
+	if _, ok := readSkipReg(t, a).(*proto.Hello); !ok {
+		t.Fatalf("hello が来ない")
+	}
+
+	// ping を末尾の空白でちょうど 32768 バイトに埋める
+	// (JSON 末尾の空白は Decode 上無視される)。
+	ping, err := proto.Encode(&proto.Ping{T: proto.TPing, Ts: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := []byte(string(ping) + strings.Repeat(" ", 32768-len(ping)))
+	if len(msg) != 32768 {
+		t.Fatalf("境界メッセージのサイズが違う: %d", len(msg))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := a.Write(ctx, websocket.MessageText, msg); err != nil {
+		t.Fatalf("境界サイズの送信失敗: %v", err)
+	}
+	if _, ok := readSkipReg(t, a).(*proto.Pong); !ok {
+		t.Fatalf("境界サイズの ping に pong が返らない (切断された?)")
+	}
+}

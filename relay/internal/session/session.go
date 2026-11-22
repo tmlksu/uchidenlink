@@ -45,6 +45,10 @@ const (
 	// closeReplaced は同一端末の新しい接続が古い接続を置き換えるときの
 	// 独自クローズコードである (RFC 6455 の 4000 番台)。
 	closeReplaced websocket.StatusCode = 4001
+	// wsReadLimit は 1 接続あたりの WS 読み取り上限 (バイト) である。
+	// coder/websocket の既定 (32768) と同じ値で、ライブラリ既定への
+	// 暗黙依存をなくすため明示するだけなので、ここで緩めてはならない。
+	wsReadLimit = 32768
 )
 
 // BackendFactory は account ごとの call.Backend を作る。
@@ -544,6 +548,9 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("WS accept 失敗", "err", err)
 		return
 	}
+	// 読み取り上限を明示する (ライブラリ既定と同じ値。超過した接続だけが
+	// 切断され、他の接続・通話は継続する)。
+	ws.SetReadLimit(wsReadLimit)
 	c := &Conn{
 		hub: h, ws: ws, deviceID: deviceID, principal: principal,
 		version: r.Header.Get("X-Client-Version"),
