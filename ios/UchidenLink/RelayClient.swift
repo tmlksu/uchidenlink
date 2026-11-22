@@ -61,12 +61,13 @@ final class RelayClient: NSObject {
     }
 
     /// 設定から接続先 URL を作る。DEBUG のモック URL が空でなければそのまま使う。
+    /// release ビルドでは mockURL 分岐自体を除去し、Keychain の値は読まない (消さない)。
     nonisolated static func sessionURL(settings: AppSettings) -> URL? {
+        #if DEBUG
         let mock = settings.mockURL.trimmingCharacters(in: .whitespaces)
         if !mock.isEmpty {
             return URL(string: mock)
         }
-        #if DEBUG
         let allowLoopback = true
         #else
         let allowLoopback = false
