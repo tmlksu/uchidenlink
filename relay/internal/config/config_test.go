@@ -258,10 +258,10 @@ func TestWarnings(t *testing.T) {
 	if w := c.Warnings(); len(w) != 0 {
 		t.Errorf("警告は無いはず: %q", w)
 	}
-	// token モードの既定アカウントは警告しない (開発用)。
+	// token モードでも既定アカウントが有効なら警告する (SEC-03)。
 	c = Config{AuthMode: "token", SIPUser: "101", Listen: "127.0.0.1:8080"}
-	if w := c.Warnings(); len(w) != 0 {
-		t.Errorf("token モードでは警告しないはず: %q", w)
+	if w := c.Warnings(); len(w) != 1 || !strings.Contains(w[0], "SIP_USER") {
+		t.Errorf("token モードでも既定アカウントの警告が出るはず: %q", w)
 	}
 	c = Config{AuthMode: "token", Listen: "127.0.0.1:8080", DeviceBinding: "enforce"}
 	if w := c.Warnings(); len(w) != 1 || !strings.Contains(w[0], "DEVICE_BINDING=enforce") {

@@ -192,9 +192,13 @@ func IsLoopbackListen(listen string) (bool, error) {
 // Warnings は起動を止めるほどではないが運用上危険な設定の警告を返す。
 func (c Config) Warnings() []string {
 	var w []string
-	if c.AuthMode == "cf-access" && c.SIPUser != "" {
-		w = append(w, "既定アカウント (SIP_USER) が設定されている: 漏洩した Access Service Token だけで "+
-			"sip_account 無しに既定内線 "+c.SIPUser+" で発信できる。端末ごとに sip_account で設定し SIP_USER は空にすることを推奨 (docs/SECURITY.md)")
+	if c.SIPUser != "" {
+		who := "DEV_TOKEN"
+		if c.AuthMode == "cf-access" {
+			who = "Access Service Token"
+		}
+		w = append(w, "既定アカウント (SIP_USER) が設定されている: 漏洩した "+who+" だけで "+
+			"sip_account 無しに既定内線で発信できる。端末ごとに sip_account で設定し SIP_USER は空にすることを推奨 (docs/SECURITY.md)")
 	}
 	if c.AuthMode == "token" && c.AllowInsecureListen {
 		if ok, err := IsLoopbackListen(c.Listen); err == nil && !ok {
