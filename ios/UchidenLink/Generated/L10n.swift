@@ -206,7 +206,7 @@ enum L10n {
     static let provisionNoCamera = "カメラが無いため QR コードを読めません。「貼り付けで設定」を使ってください"
     static let keypadModeForeground = "フォアグラウンド"
     static let settingsModeTitle = "接続方式"
-    static let settingsModeDescForeground = "アプリを開いている間 WSS で接続します。閉じている間の着信は VoIP push で起こします (VoIP push は今後対応)。"
+    static let settingsModeDescForeground = "アプリを開いている間 WSS で接続します。閉じている間の着信は VoIP push で起こします。"
     static let settingsMissingSip = "SIP アカウント (内線番号)"
     static let settingsSecProvision = "設定コード"
     static let settingsSecTest = "テスト"

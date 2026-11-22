@@ -471,7 +471,7 @@
    ]
   },
   "settings_mode_desc_foreground": {
-   "ja": "アプリを開いている間 WSS で接続します。閉じている間の着信は VoIP push で起こします (VoIP push は今後対応)。",
+   "ja": "アプリを開いている間 WSS で接続します。閉じている間の着信は VoIP push で起こします。",
    "platforms": [
     "ios"
    ]
